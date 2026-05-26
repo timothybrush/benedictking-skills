@@ -5,9 +5,9 @@
  * Provides a CLI wrapper around Exa endpoints for skill integration.
  *
  * Usage:
- *   node exa-api.js <search|contents|findsimilar|answer|research> [<json-string>]
- *   cat payload.json | node exa-api.js search
- *   node exa-api.js search --file ./payload.json
+ *   node exa-api.cjs <search|contents|findsimilar|answer|research> [<json-string>]
+ *   cat payload.json | node exa-api.cjs search
+ *   node exa-api.cjs search --file ./payload.json
  */
 
 const https = require('https');
@@ -36,13 +36,17 @@ function loadApiKey() {
 }
 
 function usage() {
-  const cmd = path.basename(process.argv[1] || 'exa-api.js');
+  const cmd = path.basename(process.argv[1] || 'exa-api.cjs');
   console.error(
     [
       'Usage:',
       `  node ${cmd} <search|contents|findsimilar|answer|research> [<json-string>]`,
       `  cat payload.json | node ${cmd} search`,
       `  node ${cmd} search --file ./payload.json`,
+      '',
+      'Research migration:',
+      '  Exa removed /research on 2026-05-01. Prefer search with type "deep-reasoning".',
+      '  The legacy research command is mapped to /search and normalizes old payload fields.',
       '',
       'Env:',
       '  EXA_API_KEY (env var) or .env file next to this script',
@@ -146,12 +150,46 @@ function postJson(endpointPath, apiKey, payload) {
   });
 }
 
+function normalizePayload(command, payload) {
+  if (command !== 'research') {
+    return payload;
+  }
+
+  const {
+    input,
+    instructions,
+    output_schema: outputSchemaSnake,
+    outputSchema,
+    query,
+    model: _model,
+    citation_format: _citationFormat,
+    ...rest
+  } = payload;
+
+  const normalized = {
+    ...rest,
+    query: query || input || instructions,
+    type: rest.type || 'deep-reasoning',
+  };
+
+  const schema = outputSchema || outputSchemaSnake;
+  if (schema) {
+    normalized.outputSchema = schema.type ? schema : { type: 'object', ...schema };
+  }
+
+  if (!normalized.query) {
+    throw new Error('Legacy research payload requires query, input, or instructions');
+  }
+
+  return normalized;
+}
+
 const ENDPOINT_BY_COMMAND = {
   search: '/search',
   contents: '/contents',
   findsimilar: '/findSimilar',
   answer: '/answer',
-  research: '/research',
+  research: '/search',
 };
 
 (async () => {
@@ -169,13 +207,13 @@ const ENDPOINT_BY_COMMAND = {
 
   const apiKey = loadApiKey();
   if (!apiKey) {
-    console.error('Missing Exa API key: set EXA_API_KEY or create .env next to exa-api.js');
+    console.error('Missing Exa API key: set EXA_API_KEY or create .env next to exa-api.cjs');
     process.exit(1);
   }
 
   try {
     const payload = await readPayload(process.argv.slice(3));
-    const result = await postJson(endpoint, apiKey, payload);
+    const result = await postJson(endpoint, apiKey, normalizePayload(command, payload));
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     console.error(`Error: ${error.message}`);

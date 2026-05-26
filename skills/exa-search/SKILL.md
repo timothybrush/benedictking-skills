@@ -5,7 +5,7 @@ license: MIT
 compatibility: Designed for Claude Code; requires Node.js and network access to the Exa API.
 metadata:
   author: BenedictKing
-  version: "1.0.1"
+  version: "1.0.2"
   user-invocable: "true"
 allowed-tools: Bash Read
 ---
@@ -16,11 +16,13 @@ allowed-tools: Bash Read
 
 Choose Exa endpoint based on user intent:
 
-- **search**: Need semantic search / find web pages / research topics
-- **contents**: Given result IDs, need to extract full content
-- **findsimilar**: Given URL, need to find similar pages
-- **answer**: Need direct answer to a question
-- **research**: Need structured research output following given `output_schema`
+- **search**: Need semantic search / find web pages / research topics. Use `type: "auto"` by default.
+- **deep search / structured research**: Use the **search** endpoint with `type: "deep"` or `type: "deep-reasoning"` and optional `outputSchema`.
+- **contents**: Given result IDs, need to extract full content.
+- **findsimilar**: Given URL, need to find similar pages.
+- **answer**: Need direct answer to a question.
+
+`/research` and `/research/v1` are deprecated and were hard-removed on 2026-05-01. Do not use them for new calls; migrate research-style requests to `/search` with `type: "deep-reasoning"`.
 
 ## Recommended Architecture (Main Skill + Sub-skill)
 
@@ -37,10 +39,12 @@ Use Task tool to invoke `exa-fetcher` sub-skill, passing command and JSON (stdin
 Task parameters:
 - subagent_type: Bash
 - description: "Call Exa API"
-- prompt: cat <<'JSON' | node scripts/exa-api.cjs <search|contents|findsimilar|answer|research>
+- prompt: cat <<'JSON' | node scripts/exa-api.cjs <search|contents|findsimilar|answer>
   { ...payload... }
   JSON
 ```
+
+The script still accepts the legacy `research` command for backwards compatibility, but it normalizes the payload and sends it to `/search` with `type: "deep-reasoning"`.
 
 ## Payload Examples
 
@@ -57,11 +61,7 @@ cat <<'JSON' | node scripts/exa-api.cjs search
   "excludeDomains": [],
   "startPublishedDate": "2025-01-01",
   "endPublishedDate": "2025-12-31",
-  "includeText": [],
-  "excludeText": [],
-  "context": true,
   "contents": {
-    "text": true,
     "highlights": true,
     "summary": true
   }
@@ -70,13 +70,17 @@ JSON
 ```
 
 **Search Types:**
-- `neural`: Semantic search using embeddings
-- `fast`: Quick keyword-based search
-- `auto`: Automatically choose best method (default)
-- `deep`: Comprehensive deep search
+- `auto`: Balanced default
+- `fast`: Low latency
+- `instant`: Lowest latency
+- `deep-lite`: Lightweight synthesized output
+- `deep`: Multi-step search with reasoning and structured outputs
+- `deep-reasoning`: Highest-effort deep search for complex research tasks
+
+Treat older `neural` references as legacy terminology; prefer `auto` for normal searches.
 
 **Categories:**
-- `company`, `people`, `research paper`, `news`, `pdf`, `github`, `tweet`, etc.
+- `company`, `people`, `research paper`, `news`, `personal site`, `financial report`, etc.
 
 ### 2) Contents
 
@@ -123,15 +127,19 @@ cat <<'JSON' | node scripts/exa-api.cjs answer
 JSON
 ```
 
-### 5) Research
+### 5) Structured Research via Search
+
+Use `/search` with `type: "deep-reasoning"` and `outputSchema` for research-style synthesized output.
 
 ```bash
-cat <<'JSON' | node scripts/exa-api.cjs research
+cat <<'JSON' | node scripts/exa-api.cjs search
 {
-  "input": "What are the latest developments in AI?",
-  "model": "auto",
+  "query": "What are the latest developments in AI?",
+  "type": "deep-reasoning",
   "stream": false,
-  "output_schema": {
+  "systemPrompt": "Prefer official sources and provide specific, grounded findings.",
+  "outputSchema": {
+    "type": "object",
     "properties": {
       "topic": {
         "type": "string",
@@ -146,11 +154,12 @@ cat <<'JSON' | node scripts/exa-api.cjs research
       }
     },
     "required": ["topic"]
-  },
-  "citation_format": "numbered"
+  }
 }
 JSON
 ```
+
+`/search` returns synthesized content in `output.content` and field-level citations/confidence in `output.grounding` when `outputSchema` is used. Do not add citation or confidence fields to the schema.
 
 ## Environment Variables & API Key
 

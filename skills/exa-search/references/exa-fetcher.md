@@ -21,7 +21,7 @@ Execute Exa API calls in an independent context with `context: fork`, avoiding c
 Receives complete command through Task's `prompt`, using stdin for JSON:
 
 ```bash
-cat <<'JSON' | node .claude/skills/exa-search/exa-api.js <search|contents|findsimilar|answer|research>
+cat <<'JSON' | node .claude/skills/exa-search/scripts/exa-api.cjs <search|contents|findsimilar|answer>
 { ...payload... }
 JSON
 ```
