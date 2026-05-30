@@ -5,11 +5,14 @@
  * Provides a CLI wrapper around Firecrawl endpoints for skill integration.
  *
  * Usage:
- *   node firecrawl-api.js <scrape|crawl|map|batch-scrape|crawl-status> [<json-string>]
+ *   node firecrawl-api.js <scrape|crawl|map|batch-scrape|crawl-status|batch-status|batch-errors> [<json-string>]
  *   cat payload.json | node firecrawl-api.js scrape
  *   node firecrawl-api.js scrape --file ./payload.json
  *   node firecrawl-api.js crawl --wait < payload.json
  *   node firecrawl-api.js crawl-status <crawl-id> [--wait]
+ *   node firecrawl-api.js batch-scrape --wait < payload.json
+ *   node firecrawl-api.js batch-status <batch-id> [--wait]
+ *   node firecrawl-api.js batch-errors <batch-id>
  */
 
 const https = require('https');
@@ -42,15 +45,18 @@ function usage() {
   console.error(
     [
       'Usage:',
-      `  node ${cmd} <scrape|crawl|map|batch-scrape|crawl-status> [<json-string>]`,
+      `  node ${cmd} <scrape|crawl|map|batch-scrape|crawl-status|batch-status|batch-errors> [<json-string>]`,
       `  cat payload.json | node ${cmd} scrape`,
       `  node ${cmd} scrape --file ./payload.json`,
       `  node ${cmd} crawl --wait < payload.json`,
       `  node ${cmd} crawl-status <crawl-id> [--wait]`,
+      `  node ${cmd} batch-scrape --wait < payload.json`,
+      `  node ${cmd} batch-status <batch-id> [--wait]`,
+      `  node ${cmd} batch-errors <batch-id>`,
       '',
       'Options:',
-      '  --wait  Wait for crawl job completion (crawl / crawl-status only)',
-      '  --id    Crawl job id (crawl-status only)',
+      '  --wait  Wait for job completion (crawl / crawl-status / batch-scrape / batch-status)',
+      '  --id    Job id (crawl-status / batch-status)',
       '',
       'Env:',
       '  FIRECRAWL_API_KEY (env var) or .env file next to this script',
@@ -188,26 +194,6 @@ function takeFlagValue(args, flag) {
   return value;
 }
 
-function extractCrawlJobId(result) {
-  const candidates = [
-    result?.id,
-    result?.jobId,
-    result?.data?.id,
-    result?.data?.jobId,
-    result?.crawlId,
-    result?.data?.crawlId,
-  ];
-
-  return candidates.find((value) => typeof value === 'string' && value.trim().length > 0) || null;
-}
-
-function extractCrawlStatus(result) {
-  const status = result?.status ?? result?.data?.status;
-  if (typeof status !== 'string') {
-    return null;
-  }
-  return status.trim().toLowerCase();
-}
 
 function isTerminalSuccessStatus(status) {
   return new Set(['completed', 'complete', 'done', 'success', 'succeeded', 'finished']).has(status);
@@ -222,22 +208,36 @@ async function getCrawlStatus(apiKey, crawlId) {
   return requestJson('GET', `/v2/crawl/${safeId}`, apiKey);
 }
 
-async function waitForCrawlCompletion(apiKey, crawlId) {
+async function getBatchStatus(apiKey, batchId) {
+  const safeId = encodeURIComponent(batchId);
+  return requestJson('GET', `/v2/batch/scrape/${safeId}`, apiKey);
+}
+
+async function getBatchErrors(apiKey, batchId) {
+  const safeId = encodeURIComponent(batchId);
+  return requestJson('GET', `/v2/batch/scrape/${safeId}/errors`, apiKey);
+}
+
+function extractJobId(result) {
+  return [result?.id, result?.jobId, result?.data?.id, result?.data?.jobId]
+    .find((v) => typeof v === 'string' && v.trim().length > 0) || null;
+}
+
+function extractJobStatus(result) {
+  const status = result?.status ?? result?.data?.status;
+  if (typeof status !== 'string') return null;
+  return status.trim().toLowerCase();
+}
+
+async function waitForJobCompletion(apiKey, jobId, getStatus, label) {
   const pollIntervalMs = 3_000;
-
-  // Poll forever by default; caller can abort with Ctrl+C.
   for (;;) {
-    const statusResult = await getCrawlStatus(apiKey, crawlId);
-    const status = extractCrawlStatus(statusResult);
-
-    if (!status || isTerminalSuccessStatus(status)) {
-      return statusResult;
-    }
-
+    const statusResult = await getStatus(apiKey, jobId);
+    const status = extractJobStatus(statusResult);
+    if (!status || isTerminalSuccessStatus(status)) return statusResult;
     if (isTerminalFailureStatus(status)) {
-      throw new Error(`Crawl job ${crawlId} ended with status "${status}"`);
+      throw new Error(`${label} ${jobId} ended with status "${status}"`);
     }
-
     await sleep(pollIntervalMs);
   }
 }
@@ -246,7 +246,7 @@ const ENDPOINT_BY_COMMAND = {
   scrape: '/v2/scrape',
   crawl: '/v2/crawl',
   map: '/v2/map',
-  'batch-scrape': '/v2/batch-scrape',
+  'batch-scrape': '/v2/batch/scrape',
 };
 
 (async () => {
@@ -271,34 +271,59 @@ const ENDPOINT_BY_COMMAND = {
   try {
     const wait = takeFlag(args, '--wait');
 
-    if (command === 'crawl-status') {
-      const explicitId = takeFlagValue(args, '--id');
-
-      let crawlId = explicitId;
-      if (!crawlId) {
+    // Shared: parse job id from CLI args or JSON payload (crawl-status / batch-status)
+    async function parseJobId(args, explicitId) {
+      let jobId = explicitId;
+      if (!jobId) {
         if (args[0] && !args[0].startsWith('-') && !args[0].trim().startsWith('{')) {
-          crawlId = args[0];
+          jobId = args[0];
         }
-
         const hasJsonPayload =
           args.includes('--file') ||
           args.includes('--data') ||
           (args[0] && args[0].trim().startsWith('{')) ||
           !process.stdin.isTTY;
-
-        if (!crawlId && hasJsonPayload) {
+        if (!jobId && hasJsonPayload) {
           const payload = await readPayload(args);
-          crawlId = extractCrawlJobId(payload);
+          jobId = extractJobId(payload);
         }
       }
+      return jobId;
+    }
 
+    if (command === 'crawl-status') {
+      const explicitId = takeFlagValue(args, '--id');
+      const crawlId = await parseJobId(args, explicitId);
       if (!crawlId) {
         throw new Error('Missing crawl id (pass <crawl-id>, --id <crawl-id>, or a JSON payload containing id/jobId)');
       }
-
       const result = wait
-        ? await waitForCrawlCompletion(apiKey, crawlId)
+        ? await waitForJobCompletion(apiKey, crawlId, getCrawlStatus, 'Crawl job')
         : await getCrawlStatus(apiKey, crawlId);
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+
+    if (command === 'batch-status') {
+      const explicitId = takeFlagValue(args, '--id');
+      const batchId = await parseJobId(args, explicitId);
+      if (!batchId) {
+        throw new Error('Missing batch id (pass <batch-id>, --id <batch-id>, or a JSON payload containing id/jobId)');
+      }
+      const result = wait
+        ? await waitForJobCompletion(apiKey, batchId, getBatchStatus, 'Batch scrape job')
+        : await getBatchStatus(apiKey, batchId);
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+
+    if (command === 'batch-errors') {
+      const explicitId = takeFlagValue(args, '--id');
+      const batchId = await parseJobId(args, explicitId);
+      if (!batchId) {
+        throw new Error('Missing batch id (pass <batch-id>, --id <batch-id>, or a JSON payload containing id/jobId)');
+      }
+      const result = await getBatchErrors(apiKey, batchId);
       console.log(JSON.stringify(result, null, 2));
       return;
     }
@@ -309,20 +334,22 @@ const ENDPOINT_BY_COMMAND = {
       process.exit(1);
     }
 
-    if (wait && command !== 'crawl') {
-      throw new Error('--wait is only supported for crawl or crawl-status');
+    if (wait && command !== 'crawl' && command !== 'batch-scrape') {
+      throw new Error('--wait is only supported for crawl, crawl-status, batch-scrape, or batch-status');
     }
 
     const payload = await readPayload(args);
     const result = await requestJson('POST', endpoint, apiKey, payload);
 
-    if (command === 'crawl' && wait) {
-      const crawlId = extractCrawlJobId(result);
-      if (!crawlId) {
-        throw new Error('Missing crawl job id in response (expected id/jobId)');
+    if (wait) {
+      const jobId = extractJobId(result);
+      if (!jobId) {
+        throw new Error(`Missing job id in ${command} response (expected id/jobId)`);
       }
 
-      const finalResult = await waitForCrawlCompletion(apiKey, crawlId);
+      const label = command === 'crawl' ? 'Crawl job' : 'Batch scrape job';
+      const getStatus = command === 'crawl' ? getCrawlStatus : getBatchStatus;
+      const finalResult = await waitForJobCompletion(apiKey, jobId, getStatus, label);
       console.log(JSON.stringify(finalResult, null, 2));
       return;
     }

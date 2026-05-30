@@ -5,7 +5,7 @@ license: MIT
 compatibility: Designed for Claude Code; requires Node.js and network access to the Firecrawl API.
 metadata:
   author: BenedictKing
-  version: "1.0.1"
+  version: "1.0.2"
   user-invocable: "true"
 allowed-tools: Bash Read
 ---
@@ -21,6 +21,8 @@ Choose Firecrawl endpoint based on user intent:
 - **map**: Need to quickly get a list of all URLs on a website
 - **batch-scrape**: Need to scrape multiple URLs in parallel
 - **crawl-status**: Given crawl job ID, check crawl progress/results (optional `--wait`)
+- **batch-status**: Given batch job ID, check batch scrape progress/results (optional `--wait`)
+- **batch-errors**: Given batch job ID, retrieve batch scrape errors
 
 ## Recommended Architecture (Main Skill + Sub-skill)
 
@@ -37,7 +39,7 @@ Use Task tool to invoke `firecrawl-fetcher` sub-skill, passing command and JSON 
 Task parameters:
 - subagent_type: Bash
 - description: "Call Firecrawl API"
-- prompt: cat <<'JSON' | node scripts/firecrawl-api.cjs <scrape|crawl|map|batch-scrape|crawl-status> [--wait]
+- prompt: cat <<'JSON' | node scripts/firecrawl-api.cjs <scrape|crawl|map|batch-scrape|crawl-status|batch-status|batch-errors> [--wait]
   { ...payload... }
   JSON
 ```
@@ -178,6 +180,40 @@ cat <<'JSON' | node scripts/firecrawl-api.cjs batch-scrape
 JSON
 ```
 
+Returns async job response: `{ "success": true, "id": "<batch-id>", "url": "..." }`
+
+### 7.1) Batch Scrape + Wait for Completion
+
+```bash
+cat <<'JSON' | node scripts/firecrawl-api.cjs batch-scrape --wait
+{
+  "urls": [
+    "https://example.com/page1",
+    "https://example.com/page2"
+  ],
+  "formats": ["markdown"]
+}
+JSON
+```
+
+### 7.2) Check Batch Scrape Status
+
+```bash
+node scripts/firecrawl-api.cjs batch-status <batch-id>
+```
+
+Wait for completion:
+
+```bash
+node scripts/firecrawl-api.cjs batch-status <batch-id> --wait
+```
+
+### 7.3) Get Batch Scrape Errors
+
+```bash
+node scripts/firecrawl-api.cjs batch-errors <batch-id>
+```
+
 ### 8) Check Crawl Status
 
 ```bash
@@ -238,3 +274,6 @@ All endpoints return JSON with:
 - `success`: Boolean indicating success
 - `data`: Extracted content (format depends on endpoint)
 - For crawl: Returns job ID, use `crawl-status` (or GET /v2/crawl/{id}) to check status
+- For batch-scrape: Returns async job response (`{ success, id, url }`), use `batch-status` (or GET /v2/batch/scrape/{id}) to poll status
+- Batch status response includes `status`, `total`, `completed`, `creditsUsed`, `expiresAt`, `next`, `data[]`
+  - `next`: pagination URL for large/incomplete results (script returns raw response; follow manually if needed)
