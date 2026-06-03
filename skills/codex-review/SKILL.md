@@ -5,7 +5,7 @@ license: MIT
 compatibility: Designed for Claude Code; requires git and codex CLI; may also need project-specific lint or format tools available in PATH.
 metadata:
   author: BenedictKing
-  version: "2.1.11"
+  version: "2.1.12"
   user-invocable: "true"
 allowed-tools: Bash Read Glob Write Edit
 ---
@@ -214,43 +214,23 @@ Task parameters:
 - timeout: 2400000 (40 minutes for critical tasks) / 900000 (15 minutes for difficult tasks) / 600000 (10 minutes for normal tasks)
 - prompt: Choose corresponding command based on project type and difficulty
 
-Go project - Critical task:
-  go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=xhigh
-  (timeout: 2400000)
+Build the prompt as:
+  <lint command> && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=<effort>
 
-Go project - Difficult task:
-  go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=xhigh
-  (timeout: 900000)
+Lint command (by project type):
+  Go:     go fmt ./... && go vet ./...
+  Node:   npm run lint:fix
+  Python: black . && ruff check --fix .
 
-Go project - Normal task:
+Reasoning effort + timeout (by difficulty):
+  Critical:  model_reasoning_effort=xhigh, timeout 2400000 (40 min)
+  Difficult: model_reasoning_effort=xhigh, timeout 900000  (15 min)
+  Normal:    model_reasoning_effort=high,  timeout 600000  (10 min)
+
+Example (Go, Normal):
   go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=high
-  (timeout: 600000)
 
-Node project - Critical task:
-  npm run lint:fix && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=xhigh
-  (timeout: 2400000)
-
-Node project - Difficult task:
-  npm run lint:fix && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=xhigh
-  (timeout: 900000)
-
-Node project - Normal task:
-  npm run lint:fix && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=high
-  (timeout: 600000)
-
-Python project - Critical task:
-  black . && ruff check --fix . && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=xhigh
-  (timeout: 2400000)
-
-Python project - Difficult task:
-  black . && ruff check --fix . && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=xhigh
-  (timeout: 900000)
-
-Python project - Normal task:
-  black . && ruff check --fix . && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=high
-  (timeout: 600000)
-
-Clean working directory:
+Clean working directory (review last commit, no lint):
   codex review --commit HEAD --config model=gpt-5.5 --config model_reasoning_effort=high
   (timeout: 600000)
 ```
