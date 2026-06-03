@@ -1,8 +1,8 @@
 ---
 name: codex-runner
-version: 1.0.2
+version: 1.0.3
 author: BenedictKing
-description: Independent subtask for executing Lint and codex review with the recommended gpt-5.3-codex config (internal use)
+description: Independent subtask for executing Lint and codex review with the recommended gpt-5.5 config (internal use)
 allowed-tools:
   - Bash
 context: fork
@@ -22,29 +22,29 @@ Receives complete command chain through Task tool's prompt parameter:
 
 1. **Lint command**: Auto-selected based on project type (go fmt, npm run lint:fix, black, etc.)
 2. **Review mode**: `--uncommitted` or `--commit HEAD` or `--base <branch>`
-3. **Model config**: `--config model=gpt-5.3-codex --config model_reasoning_effort=high|xhigh`
+3. **Model config**: `--config model=gpt-5.5 --config model_reasoning_effort=high|xhigh`
 4. **Timeout**: Controlled through Task tool's timeout parameter (typically 10 min normal, 15 min difficult, 40 min critical)
 
 ## Command Examples
 
 ```bash
 # Go project - Normal task
-go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.3-codex --config model_reasoning_effort=high
+go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=high
 
 # Go project - Difficult / Critical task
-go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.3-codex --config model_reasoning_effort=xhigh
+go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=xhigh
 
 # Node project - Normal task
-npm run lint:fix && codex review --uncommitted --config model=gpt-5.3-codex --config model_reasoning_effort=high
+npm run lint:fix && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=high
 
 # Python project - Normal task
-black . && ruff check --fix . && codex review --uncommitted --config model=gpt-5.3-codex --config model_reasoning_effort=high
+black . && ruff check --fix . && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=high
 
 # Clean working directory - Review latest commit
-codex review --commit HEAD --config model=gpt-5.3-codex --config model_reasoning_effort=high
+codex review --commit HEAD --config model=gpt-5.5 --config model_reasoning_effort=high
 
 # Review changes relative to main branch
-codex review --base main --config model=gpt-5.3-codex --config model_reasoning_effort=high
+codex review --base main --config model=gpt-5.5 --config model_reasoning_effort=high
 ```
 
 ## Execution Flow

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Designed for Claude Code; requires git and codex CLI; may also need project-specific lint or format tools available in PATH.
 metadata:
   author: BenedictKing
-  version: "2.1.10"
+  version: "2.1.11"
   user-invocable: "true"
 allowed-tools: Bash Read Glob Write Edit
 ---
@@ -133,19 +133,19 @@ git diff --stat HEAD | tail -1
 
 **Model + Reasoning Effort Combinations:**
 
-Only recommend `gpt-5.3-codex`; choose `model_reasoning_effort` and timeout based on task complexity.
+Only recommend `gpt-5.5`; choose `model_reasoning_effort` and timeout based on task complexity.
 
 | Combination | Quality | Time | Timeout | Recommended For |
 |-------------|---------|------|---------|-----------------|
-| `model=gpt-5.3-codex model_reasoning_effort=xhigh` | High | ~8-20 min | 15-40 min | Difficult tasks, critical code, architecture changes |
-| `model=gpt-5.3-codex model_reasoning_effort=high` | Good | ~5-6 min | 10 min | Normal tasks (default) |
+| `model=gpt-5.5 model_reasoning_effort=xhigh` | High | ~8-20 min | 15-40 min | Difficult tasks, critical code, architecture changes |
+| `model=gpt-5.5 model_reasoning_effort=high` | Good | ~5-6 min | 10 min | Normal tasks (default) |
 
 **Critical Tasks** (meets any condition, use highest reasoning effort):
 
 - Modified files ≥ 30
 - Total code changes (insertions + deletions) ≥ 2000 lines
 - Involves core architecture/algorithm changes (user explicitly mentioned)
-- Config: `--config model=gpt-5.3-codex --config model_reasoning_effort=xhigh`, timeout 40 minutes
+- Config: `--config model=gpt-5.5 --config model_reasoning_effort=xhigh`, timeout 40 minutes
 
 **Difficult Tasks** (meets any condition):
 
@@ -153,11 +153,11 @@ Only recommend `gpt-5.3-codex`; choose `model_reasoning_effort` and timeout base
 - Total code changes (insertions + deletions) ≥ 500 lines
 - Single metric: insertions ≥ 300 lines OR deletions ≥ 300 lines
 - Cross-module refactoring
-- Default config: `--config model=gpt-5.3-codex --config model_reasoning_effort=xhigh`, timeout 15 minutes
+- Default config: `--config model=gpt-5.5 --config model_reasoning_effort=xhigh`, timeout 15 minutes
 
 **Normal Tasks** (other cases):
 
-- Default config: `--config model=gpt-5.3-codex --config model_reasoning_effort=high`, timeout 10 minutes
+- Default config: `--config model=gpt-5.5 --config model_reasoning_effort=high`, timeout 10 minutes
 
 **Evaluation Method:**
 
@@ -190,18 +190,18 @@ git diff --stat HEAD | tail -1
 - Pure rename: May show `"0 insertions(+), 0 deletions(-)"` or omit both
 
 **Decision Logic (check in order, first match wins):**
-- IF file_count >= 30 OR total_changes >= 2000 → **Critical** (gpt-5.3-codex + xhigh)
-- IF file_count >= 10 → **Difficult** (gpt-5.3-codex + xhigh)
-- IF total_changes >= 500 → **Difficult** (gpt-5.3-codex + xhigh)
-- IF insertions >= 300 OR deletions >= 300 → **Difficult** (gpt-5.3-codex + xhigh)
-- ELSE → **Normal** (gpt-5.3-codex + high)
+- IF file_count >= 30 OR total_changes >= 2000 → **Critical** (gpt-5.5 + xhigh)
+- IF file_count >= 10 → **Difficult** (gpt-5.5 + xhigh)
+- IF total_changes >= 500 → **Difficult** (gpt-5.5 + xhigh)
+- IF insertions >= 300 OR deletions >= 300 → **Difficult** (gpt-5.5 + xhigh)
+- ELSE → **Normal** (gpt-5.5 + high)
 
 **Example Cases:**
-- ⭐ "50 files changed, 2000 insertions(+), 1500 deletions(-)" → **Critical task**, use `model=gpt-5.3-codex model_reasoning_effort=xhigh`, timeout 40 minutes (core architecture change)
-- ✅ "20 files changed, 342 insertions(+), 985 deletions(-)" → **Difficult task**, use `model=gpt-5.3-codex model_reasoning_effort=xhigh`, timeout 15 minutes
-- ✅ "5 files changed, 600 insertions(+), 50 deletions(-)" → **Difficult task**, use `model=gpt-5.3-codex model_reasoning_effort=xhigh`, timeout 15 minutes
-- ❌ "3 files changed, 150 insertions(+), 80 deletions(-)" → **Normal task**, use `model=gpt-5.3-codex model_reasoning_effort=high`, timeout 10 minutes
-- ❌ "1 file changed, 50 insertions(+)" → **Normal task**, use `model=gpt-5.3-codex model_reasoning_effort=high`, timeout 10 minutes
+- ⭐ "50 files changed, 2000 insertions(+), 1500 deletions(-)" → **Critical task**, use `model=gpt-5.5 model_reasoning_effort=xhigh`, timeout 40 minutes (core architecture change)
+- ✅ "20 files changed, 342 insertions(+), 985 deletions(-)" → **Difficult task**, use `model=gpt-5.5 model_reasoning_effort=xhigh`, timeout 15 minutes
+- ✅ "5 files changed, 600 insertions(+), 50 deletions(-)" → **Difficult task**, use `model=gpt-5.5 model_reasoning_effort=xhigh`, timeout 15 minutes
+- ❌ "3 files changed, 150 insertions(+), 80 deletions(-)" → **Normal task**, use `model=gpt-5.5 model_reasoning_effort=high`, timeout 10 minutes
+- ❌ "1 file changed, 50 insertions(+)" → **Normal task**, use `model=gpt-5.5 model_reasoning_effort=high`, timeout 10 minutes
 
 **Invoke codex-runner Subtask:**
 
@@ -215,43 +215,43 @@ Task parameters:
 - prompt: Choose corresponding command based on project type and difficulty
 
 Go project - Critical task:
-  go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.3-codex --config model_reasoning_effort=xhigh
+  go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=xhigh
   (timeout: 2400000)
 
 Go project - Difficult task:
-  go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.3-codex --config model_reasoning_effort=xhigh
+  go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=xhigh
   (timeout: 900000)
 
 Go project - Normal task:
-  go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.3-codex --config model_reasoning_effort=high
+  go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=high
   (timeout: 600000)
 
 Node project - Critical task:
-  npm run lint:fix && codex review --uncommitted --config model=gpt-5.3-codex --config model_reasoning_effort=xhigh
+  npm run lint:fix && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=xhigh
   (timeout: 2400000)
 
 Node project - Difficult task:
-  npm run lint:fix && codex review --uncommitted --config model=gpt-5.3-codex --config model_reasoning_effort=xhigh
+  npm run lint:fix && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=xhigh
   (timeout: 900000)
 
 Node project - Normal task:
-  npm run lint:fix && codex review --uncommitted --config model=gpt-5.3-codex --config model_reasoning_effort=high
+  npm run lint:fix && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=high
   (timeout: 600000)
 
 Python project - Critical task:
-  black . && ruff check --fix . && codex review --uncommitted --config model=gpt-5.3-codex --config model_reasoning_effort=xhigh
+  black . && ruff check --fix . && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=xhigh
   (timeout: 2400000)
 
 Python project - Difficult task:
-  black . && ruff check --fix . && codex review --uncommitted --config model=gpt-5.3-codex --config model_reasoning_effort=xhigh
+  black . && ruff check --fix . && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=xhigh
   (timeout: 900000)
 
 Python project - Normal task:
-  black . && ruff check --fix . && codex review --uncommitted --config model=gpt-5.3-codex --config model_reasoning_effort=high
+  black . && ruff check --fix . && codex review --uncommitted --config model=gpt-5.5 --config model_reasoning_effort=high
   (timeout: 600000)
 
 Clean working directory:
-  codex review --commit HEAD --config model=gpt-5.3-codex --config model_reasoning_effort=high
+  codex review --commit HEAD --config model=gpt-5.5 --config model_reasoning_effort=high
   (timeout: 600000)
 ```
 
@@ -332,7 +332,7 @@ codex review [OPTIONS] [PROMPT]
 | `--base <BRANCH>`          | Review changes relative to specified base branch                 | `codex review --base main`                                   |
 | `--commit <SHA>`           | Review changes introduced by specified commit                    | `codex review --commit HEAD`                                 |
 | `--title <TITLE>`          | Optional commit title, displayed in review summary               | `codex review --uncommitted --title "feat: add JSON parser"` |
-| `-c, --config <key=value>` | Override configuration values                                    | `codex review --uncommitted -c model="gpt-5.3-codex"`      |
+| `-c, --config <key=value>` | Override configuration values                                    | `codex review --uncommitted -c model="gpt-5.5"`      |
 
 ### Usage Examples
 
@@ -356,7 +356,7 @@ codex review --base develop
 codex review --uncommitted --title "fix: resolve JSON parsing errors"
 
 # 7. Review using the recommended model
-codex review --uncommitted -c model="gpt-5.3-codex"
+codex review --uncommitted -c model="gpt-5.5"
 ```
 
 ### Important Limitations
