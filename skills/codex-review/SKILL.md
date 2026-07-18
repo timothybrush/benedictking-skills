@@ -5,7 +5,7 @@ license: MIT
 compatibility: Designed for Claude Code; requires git and codex CLI; may also need project-specific lint or format tools available in PATH.
 metadata:
   author: BenedictKing
-  version: "2.1.13"
+  version: "2.1.14"
   user-invocable: "true"
 allowed-tools: Bash Read Glob Write Edit
 ---
@@ -145,6 +145,17 @@ Always use `model_reasoning_effort=ultra`. Choose the model and timeout based on
 |-------------|---------|-----------------|
 | `model=gpt-5.6-terra model_reasoning_effort=ultra` | 10 min | Normal tasks (default) |
 | `model=gpt-5.6-sol model_reasoning_effort=ultra` | 15-40 min | Difficult tasks, critical code, architecture changes |
+| `model=gpt-5.5 model_reasoning_effort=high` | 10 min | Normal-task fallback after both 5.6 models are unavailable |
+| `model=gpt-5.5 model_reasoning_effort=xhigh` | 15-40 min | Difficult or critical fallback after both 5.6 models are unavailable |
+
+**Model Fallback Policy:**
+
+- Determine availability from the actual `codex review` result. Do not use `codex debug models` as a preflight gate.
+- Treat only explicit model or reasoning-effort availability failures as a fallback trigger, such as a model not found, unavailable model access, or an unsupported reasoning effort.
+- Do not fall back for review findings, lint failures, authentication or network failures, timeouts, or a model-metadata warning when the review has started.
+- For normal tasks, use this order: `gpt-5.6-terra + ultra` → `gpt-5.6-sol + ultra` → `gpt-5.5 + high`.
+- For difficult and critical tasks, use this order: `gpt-5.6-sol + ultra` → `gpt-5.6-terra + ultra` → `gpt-5.5 + xhigh`.
+- Run lint only once. On an availability failure, retry only `codex review` with the same review mode and the next candidate. Stop after the `gpt-5.5` attempt and report the error if it also fails.
 
 **Critical Tasks** (meets any condition, use `gpt-5.6-sol`):
 
@@ -152,6 +163,7 @@ Always use `model_reasoning_effort=ultra`. Choose the model and timeout based on
 - Total code changes (insertions + deletions) ≥ 2000 lines
 - Involves core architecture/algorithm changes (user explicitly mentioned)
 - Config: `--config model=gpt-5.6-sol --config model_reasoning_effort=ultra`, timeout 40 minutes
+- Fallback after both 5.6 candidates are unavailable: `--config model=gpt-5.5 --config model_reasoning_effort=xhigh`
 
 **Difficult Tasks** (meets any condition):
 
@@ -160,10 +172,12 @@ Always use `model_reasoning_effort=ultra`. Choose the model and timeout based on
 - Single metric: insertions ≥ 300 lines OR deletions ≥ 300 lines
 - Cross-module refactoring
 - Default config: `--config model=gpt-5.6-sol --config model_reasoning_effort=ultra`, timeout 15 minutes
+- Fallback after both 5.6 candidates are unavailable: `--config model=gpt-5.5 --config model_reasoning_effort=xhigh`
 
 **Normal Tasks** (other cases):
 
 - Default config: `--config model=gpt-5.6-terra --config model_reasoning_effort=ultra`, timeout 10 minutes
+- Fallback after both 5.6 candidates are unavailable: `--config model=gpt-5.5 --config model_reasoning_effort=high`
 
 **Evaluation Method:**
 
@@ -221,7 +235,9 @@ Task parameters:
 - prompt: Choose corresponding command based on project type and difficulty
 
 Build the prompt as:
-  <lint command> && codex review --uncommitted --config model=<model> --config model_reasoning_effort=ultra
+  <lint command> && codex review <mode> --config model=<primary-model> --config model_reasoning_effort=ultra
+
+After lint succeeds, apply the fallback policy above. Retry only `codex review <mode>` with the next candidate after an explicit model or reasoning-effort availability failure.
 
 Lint command (by project type):
   Go:     go fmt ./... && go vet ./...
@@ -232,6 +248,8 @@ Model + timeout (by difficulty):
   Critical:  model=gpt-5.6-sol,   model_reasoning_effort=ultra, timeout 2400000 (40 min)
   Difficult: model=gpt-5.6-sol,   model_reasoning_effort=ultra, timeout 900000  (15 min)
   Normal:    model=gpt-5.6-terra, model_reasoning_effort=ultra, timeout 600000  (10 min)
+  Normal fallback:              model=gpt-5.5, model_reasoning_effort=high
+  Difficult / Critical fallback: model=gpt-5.5, model_reasoning_effort=xhigh
 
 Example (Go, Normal):
   go fmt ./... && go vet ./... && codex review --uncommitted --config model=gpt-5.6-terra --config model_reasoning_effort=ultra
